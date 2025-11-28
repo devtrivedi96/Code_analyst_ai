@@ -1,0 +1,6 @@
+pylint
+flake8
+openai
+google-generativeai
+pytest
+radon

@@ -1,0 +1,24 @@
+As an AI bug detection specialist, meticulously examine the provided Python code for any logical errors, runtime issues, potential bugs, and common programming pitfalls.
+
+Your analysis should focus on:
+
+1.  **Logical Errors**: Incorrect algorithm implementation, faulty conditions, wrong variable usage.
+2.  **Runtime Issues**: Potential exceptions (e.g., ZeroDivisionError, IndexError, KeyError, TypeError), unhandled errors.
+3.  **Edge Cases**: How the code handles unusual inputs or boundary conditions.
+4.  **Resource Management**: Improper handling of file operations, network connections, or memory.
+5.  **Concurrency Issues**: (If applicable) potential race conditions, deadlocks.
+
+Provide your findings in a structured JSON format with the following keys:
+
+*   **summary**: A brief overall summary of the bugs found or the code's robustness.
+*   **issues**: An array of objects, where each object represents an identified bug or potential issue. Each issue object should have:
+    *   **type**: (e.g., "Logical Error", "Runtime Error", "Edge Case", "Resource Leak", "Potential Bug")
+    *   **severity**: (e.g., "Critical", "High", "Medium", "Low", "Informational")
+    *   **description**: A detailed explanation of the bug or potential issue.
+    *   **suggestion**: A concrete suggestion for fixing or mitigating the issue.
+    *   **line_numbers**: An array of line numbers where the issue is found (optional).
+*   **overall_rating**: A rating (e.g., "Excellent", "Good", "Fair", "Poor") based on the bug-finding analysis.
+
+```python
+{code_to_analyze}
+```
