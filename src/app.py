@@ -10,6 +10,8 @@ sys.path.insert(0, project_root)
 from src.analyzer.syntax_checker import check_syntax
 from src.analyzer.quality_analyzer import analyze_quality
 from src.analyzer.ai_reviewer import review_code_with_ai
+from src.analyzer.logic_analyzer import LogicAnalyzer
+from src.analyzer.best_practices import BestPracticesChecker
 
 app = Flask(__name__)
 app.config['JSON_SORT_KEYS'] = False
@@ -50,7 +52,15 @@ def analyze_code():
         # 2. Quality Analysis
         quality_metrics = analyze_quality(code)
 
-        # 3. AI Review
+        # 3. Logic Analysis
+        logic_analyzer = LogicAnalyzer()
+        logic_analysis = logic_analyzer.analyze(code)
+
+        # 4. Best Practices Check
+        practices_checker = BestPracticesChecker()
+        best_practices = practices_checker.check(code)
+
+        # 5. AI Review
         ai_review = review_code_with_ai(code, model_name=model)
 
         # Prepare response
@@ -58,6 +68,8 @@ def analyze_code():
             'syntax_valid': syntax_valid,
             'syntax_error': syntax_error,
             'quality_metrics': quality_metrics,
+            'logic_analysis': logic_analysis,
+            'best_practices': best_practices,
             'ai_review': ai_review
         }
 

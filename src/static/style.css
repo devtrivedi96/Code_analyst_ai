@@ -190,8 +190,16 @@ button {
   border-left-color: #2196f3;
 }
 
-.review-card {
+.logic-card {
   border-left-color: #ff9800;
+}
+
+.practices-card {
+  border-left-color: #9c27b0;
+}
+
+.review-card {
+  border-left-color: #f44336;
 }
 
 .metric {
