@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Code Analyzer</title>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='style.css') }}"
+    />
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <h1>🤖 AI Code Analyzer</h1>
+        <p>
+          Analyze your Python code for syntax, quality, and AI-powered insights
+        </p>
+      </header>
+
+      <div class="main-content">
+        <div class="input-section">
+          <div class="controls">
+            <div class="model-selector">
+              <label for="model">AI Model:</label>
+              <select id="model">
+                <option value="gemini-pro">Gemini Pro</option>
+                <option value="gpt-4">GPT-4</option>
+                <option value="claude">Claude</option>
+              </select>
+            </div>
+            <button id="analyzeBtn" class="btn-analyze">Analyze Code</button>
+            <button id="clearBtn" class="btn-clear">Clear</button>
+          </div>
+
+          <textarea
+            id="codeInput"
+            placeholder="Paste your Python code here..."
+          ></textarea>
+        </div>
+
+        <div class="output-section">
+          <div id="loadingSpinner" class="spinner" style="display: none"></div>
+
+          <div id="results" style="display: none">
+            <!-- Syntax Check -->
+            <div class="result-card syntax-card">
+              <h3>✓ Syntax Check</h3>
+              <div id="syntaxResult"></div>
+            </div>
+
+            <!-- Code Quality -->
+            <div class="result-card quality-card">
+              <h3>📊 Code Quality</h3>
+              <div id="qualityResult"></div>
+            </div>
+
+            <!-- AI Review -->
+            <div class="result-card review-card">
+              <h3>🤖 AI Review</h3>
+              <div id="reviewResult"></div>
+            </div>
+          </div>
+
+          <div
+            id="errorMessage"
+            class="error-message"
+            style="display: none"
+          ></div>
+        </div>
+      </div>
+
+      <footer>
+        <p>AI Code Analyst - Powered by Python, Flask, and AI</p>
+      </footer>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+  </body>
+</html>

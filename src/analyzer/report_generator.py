@@ -33,23 +33,15 @@ def generate_report(analysis_results: dict, output_file: str):
     if ai_review.get('suggestions'):
         report_content.append("- **Suggestions**:")
         for suggestion in ai_review['suggestions']:
-            report_content.append(f"  * {suggestion}
-")
-    report_content.append(f"- **Severity**: {ai_review.get('severity', 'N/A')}
-")
-    report_content.append(f"- **Model Used**: {ai_review.get('model_used', 'N/A')}
-")
+            report_content.append(f"  * {suggestion}")
+    report_content.append(f"- **Severity**: {ai_review.get('severity', 'N/A')}")
+    report_content.append(f"- **Model Used**: {ai_review.get('model_used', 'N/A')}")
 
     # Add Raw JSON for debugging/completeness
-    report_content.append("
-## Raw Analysis Data (JSON)
-")
-    report_content.append("```json
-")
+    report_content.append("## Raw Analysis Data (JSON)")
+    report_content.append("```json")
     report_content.append(json.dumps(analysis_results, indent=2))
-    report_content.append("
-```
-")
+    report_content.append("```")
 
     final_report = "".join(report_content)
 
