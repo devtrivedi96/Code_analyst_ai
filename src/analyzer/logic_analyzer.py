@@ -1,239 +1,283 @@
 import logging
 import re
+import ast
 from typing import Dict, List, Tuple
 
 logger = logging.getLogger(__name__)
 
 
 class LogicAnalyzer:
-    """Analyzes code logic, best practices, and provides improvement suggestions."""
+    """Analyzes code logic for actual bugs and issues."""
 
     def __init__(self):
         self.issues = []
         self.suggestions = []
 
-    def analyze(self, code: str) -> Dict:
+    def analyze(self, code: str) -> List[Dict]:
         """Perform comprehensive logic analysis."""
         self.issues = []
         self.suggestions = []
 
-        # Run all analysis checks
-        self._check_variable_naming(code)
-        self._check_magic_numbers(code)
+        # Run ONLY logic-critical checks
+        self._check_division_by_zero(code)
+        self._check_infinite_loops(code)
+        self._check_undefined_variables(code)
+        self._check_logic_errors(code)
         self._check_error_handling(code)
-        self._check_code_repetition(code)
-        self._check_imports(code)
-        self._check_best_practices(code)
-        self._check_type_hints(code)
-        self._check_docstrings(code)
+        self._check_unreachable_code(code)
+        self._check_type_mismatches(code)
 
         logger.info(f"Logic analysis complete: {len(self.issues)} issues found")
 
-        return {
-            "total_issues": len(self.issues),
-            "issues": self.issues,
-            "suggestions": self.suggestions,
-            "severity_count": self._count_severities()
-        }
+        return self.issues
 
-    def _check_variable_naming(self, code: str):
-        """Check for poor variable naming conventions."""
+    def _check_division_by_zero(self, code: str):
+        """Check for potential division by zero."""
         lines = code.split('\n')
         
-        # Check for single-letter variables (except loops)
-        patterns = [
-            (r'\b[a-z]\s*=\s*(?!range|len)', 'Single-letter variable (except loop counters)'),
-            (r'\b(x|y|z|a|b|c)\s*=\s*\w', 'Unclear variable name'),
-        ]
+        for i, line in enumerate(lines, 1):
+            # Look for division operations with zero
+            if re.search(r'/\s*0(?![0-9])', line) or re.search(r'/\s*0\.0', line):
+                self.issues.append({
+                    'line': i,
+                    'type': 'Division by Zero',
+                    'severity': 'Critical',
+                    'message': f"Potential division by zero: {line.strip()}",
+                    'suggestion': "Check that the divisor is not zero before dividing. Use: if divisor != 0: result = a / divisor"
+                })
+            
+            # Look for variable division that might be zero
+            if '/ ' in line and not '/ 0' in line:
+                # Check if variable could be zero
+                var_match = re.search(r'/\s*(\w+)', line)
+                if var_match:
+                    var_name = var_match.group(1)
+                    # Check if this variable is set to 0 anywhere
+                    for check_line in lines:
+                        if re.search(rf'{var_name}\s*=\s*0(?![0-9])', check_line):
+                            self.issues.append({
+                                'line': i,
+                                'type': 'Division by Zero Risk',
+                                'severity': 'Major',
+                                'message': f"Variable '{var_name}' may be zero when dividing: {line.strip()}",
+                                'suggestion': f"Add validation: if {var_name} != 0: before division"
+                            })
+                            break
+
+    def _check_infinite_loops(self, code: str):
+        """Check for potential infinite loops."""
+        lines = code.split('\n')
         
         for i, line in enumerate(lines, 1):
-            # Skip comments and strings
-            if '#' in line:
-                line = line[:line.index('#')]
-            if '"""' in line or "'''" in line:
-                continue
+            # Check for 'while True:' without break
+            if 'while True:' in line or 'while 1:' in line:
+                # Look ahead for break statement
+                has_break = False
+                for j in range(i, min(i + 20, len(lines))):
+                    if 'break' in lines[j]:
+                        has_break = True
+                        break
+                    if lines[j].strip() and not lines[j][0].isspace() and j > i:
+                        break
                 
-            for pattern, message in patterns:
-                if re.search(pattern, line):
-                    # Exclude loop variables
-                    if 'for ' not in line:
+                if not has_break:
+                    self.issues.append({
+                        'line': i,
+                        'type': 'Infinite Loop',
+                        'severity': 'Critical',
+                        'message': f"Infinite loop detected: while True without break",
+                        'suggestion': "Add a break condition: while True: ... if condition: break"
+                    })
+            
+            # Check for incrementing loop variable
+            if 'for ' in line and 'range(' in line:
+                # Check if range(0) or range(-n)
+                range_match = re.search(r'range\((-?\d+)\)', line)
+                if range_match:
+                    range_val = int(range_match.group(1))
+                    if range_val <= 0:
                         self.issues.append({
                             'line': i,
-                            'type': 'Variable Naming',
-                            'severity': 'Minor',
-                            'message': f"{message}: {line.strip()}",
-                            'suggestion': 'Use descriptive variable names (e.g., user_count instead of x)'
+                            'type': 'Infinite Loop Risk',
+                            'severity': 'Major',
+                            'message': f"Loop range is {range_val} - will not execute or loop forever",
+                            'suggestion': f"Ensure range has positive value: range({abs(range_val) if range_val < 0 else 1})"
                         })
 
-    def _check_magic_numbers(self, code: str):
-        """Check for magic numbers that should be constants."""
-        lines = code.split('\n')
+    def _check_undefined_variables(self, code: str):
+        """Check for potentially undefined variables."""
+        try:
+            tree = ast.parse(code)
+        except SyntaxError:
+            return
         
-        for i, line in enumerate(lines, 1):
-            # Skip comments and strings
-            if '#' in line:
-                line = line[:line.index('#')]
-            
-            # Find numbers in assignments or comparisons (not in function calls)
-            magic_nums = re.findall(r'(?<![a-zA-Z_])(\d{2,})(?![a-zA-Z_])', line)
-            
-            for num in magic_nums:
-                if num not in ['24', '60', '100']:  # Common constants
+        defined_vars = set()
+        used_vars = set()
+        
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Name):
+                        defined_vars.add(target.id)
+            elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
+                used_vars.add(node.id)
+        
+        undefined = used_vars - defined_vars - {'print', 'len', 'range', 'str', 'int', 'float', 'list', 'dict', 'set', 'open', 'True', 'False', 'None'}
+        
+        for var in undefined:
+            lines = code.split('\n')
+            for i, line in enumerate(lines, 1):
+                if var in line and 'def ' not in line:
                     self.issues.append({
                         'line': i,
-                        'type': 'Magic Number',
-                        'severity': 'Minor',
-                        'message': f"Magic number '{num}' found: {line.strip()}",
-                        'suggestion': f"Define as constant: {num.upper()}_VALUE = {num}"
-                    })
-
-    def _check_error_handling(self, code: str):
-        """Check for missing error handling."""
-        lines = code.split('\n')
-        dangerous_functions = ['open', 'json.load', 'requests.get', 'int(', 'float(']
-        
-        has_try_except = 'try:' in code and 'except' in code
-        
-        for i, line in enumerate(lines, 1):
-            # Skip comments
-            if '#' in line:
-                line = line[:line.index('#')]
-            
-            for func in dangerous_functions:
-                if func in line and not any(x in code[max(0, code.find(line)-100):] for x in ['try:', 'except']):
-                    self.issues.append({
-                        'line': i,
-                        'type': 'Error Handling',
-                        'severity': 'Major',
-                        'message': f"Missing error handling for '{func}': {line.strip()}",
-                        'suggestion': f"Wrap in try-except block:\ntry:\n    {line.strip()}\nexcept Exception as e:\n    logger.error(f'Error: {{e}}')"
+                        'type': 'Undefined Variable',
+                        'severity': 'Critical',
+                        'message': f"Variable '{var}' may be undefined: {line.strip()}",
+                        'suggestion': f"Define '{var}' before using it: {var} = ..."
                     })
                     break
 
-    def _check_code_repetition(self, code: str):
-        """Check for repeated code patterns."""
+    def _check_logic_errors(self, code: str):
+        """Check for logic errors and faulty conditions."""
         lines = code.split('\n')
-        code_blocks = {}
         
         for i, line in enumerate(lines, 1):
-            line = line.strip()
-            if line and not line.startswith('#'):
-                if line in code_blocks:
-                    code_blocks[line].append(i)
-                else:
-                    code_blocks[line] = [i]
-        
-        for line, occurrences in code_blocks.items():
-            if len(occurrences) >= 3 and len(line) > 20:
+            stripped = line.strip()
+            
+            # Check for always True/False conditions
+            if 'if True:' in line or 'if 1:' in line:
                 self.issues.append({
-                    'line': occurrences[0],
-                    'type': 'Code Repetition',
-                    'severity': 'Major',
-                    'message': f"Code repeated {len(occurrences)} times (lines: {', '.join(map(str, occurrences))})",
-                    'suggestion': "Extract repeated code into a function to follow DRY principle"
+                    'line': i,
+                    'type': 'Logic Error',
+                    'severity': 'Minor',
+                    'message': "Condition is always True",
+                    'suggestion': "Replace with actual condition or remove if statement"
                 })
-
-    def _check_imports(self, code: str):
-        """Check for unused or problematic imports."""
-        lines = code.split('\n')
-        imports = []
-        
-        for i, line in enumerate(lines, 1):
-            if line.strip().startswith('import ') or line.strip().startswith('from '):
-                # Extract module name
-                parts = line.split()
-                if 'import' in parts:
-                    idx = parts.index('import')
-                    if idx + 1 < len(parts):
-                        imports.append((parts[idx+1], i))
-        
-        # Check for wildcard imports
-        if 'import *' in code:
-            self.issues.append({
-                'line': -1,
-                'type': 'Imports',
-                'severity': 'Major',
-                'message': "Wildcard import found (from module import *)",
-                'suggestion': "Import specific items: from module import specific_function, AnotherClass"
-            })
-
-    def _check_best_practices(self, code: str):
-        """Check for general Python best practices."""
-        issues_found = []
-        
-        # Check for print statements (should use logging)
-        if 'print(' in code and 'logging' not in code:
-            issues_found.append({
-                'type': 'Logging',
-                'severity': 'Minor',
-                'suggestion': 'Use logging module instead of print() for better control'
-            })
-        
-        # Check for bare except
-        if 'except:' in code:
-            issues_found.append({
-                'type': 'Exception Handling',
-                'severity': 'Major',
-                'suggestion': 'Avoid bare except clauses. Use except SpecificException: instead'
-            })
-        
-        # Check for mutable default arguments
-        if 'def ' in code and '=[]' in code or '={}' in code:
-            issues_found.append({
-                'type': 'Mutable Defaults',
-                'severity': 'Major',
-                'suggestion': 'Avoid mutable default arguments. Use None and initialize inside function'
-            })
-        
-        for issue in issues_found:
-            self.issues.append({
-                'line': -1,
-                'type': issue['type'],
-                'severity': issue['severity'],
-                'message': issue['type'],
-                'suggestion': issue['suggestion']
-            })
-
-    def _check_type_hints(self, code: str):
-        """Check for missing type hints."""
-        lines = code.split('\n')
-        
-        for i, line in enumerate(lines, 1):
-            stripped = line.strip()
-            # Check for function definitions without type hints
-            if stripped.startswith('def ') and '->' not in line and 'test' not in line.lower():
-                # Extract function params
-                if '(' in line and ')' in line:
-                    params = line[line.index('(')+1:line.index(')')]
-                    if params and ':' not in params:
-                        self.issues.append({
-                            'line': i,
-                            'type': 'Type Hints',
-                            'severity': 'Minor',
-                            'message': f"Missing type hints in function: {stripped[:50]}...",
-                            'suggestion': "Add type hints: def func(param: str) -> int:"
-                        })
-
-    def _check_docstrings(self, code: str):
-        """Check for missing docstrings."""
-        lines = code.split('\n')
-        
-        for i, line in enumerate(lines, 1):
-            stripped = line.strip()
-            if stripped.startswith('def ') and 'test' not in line.lower():
-                # Check if next line has docstring
+            
+            if 'if False:' in line or 'if 0:' in line or 'if None:' in line:
+                self.issues.append({
+                    'line': i,
+                    'type': 'Logic Error',
+                    'severity': 'Minor',
+                    'message': "Condition is always False - this code will never execute",
+                    'suggestion': "Remove this if block or fix the condition"
+                })
+            
+            # Check for assignment in condition
+            if re.search(r'if\s+\w+\s*=\s+', line):
+                self.issues.append({
+                    'line': i,
+                    'type': 'Logic Error',
+                    'severity': 'Major',
+                    'message': "Assignment '=' used instead of comparison '==' in condition",
+                    'suggestion': "Use '==' for comparison: if variable == value:"
+                })
+            
+            # Check for unreachable code after return
+            if stripped.startswith('return'):
                 if i < len(lines):
-                    next_line = lines[i].strip() if i < len(lines) else ''
-                    if not (next_line.startswith('"""') or next_line.startswith("'''")):
+                    next_line = lines[i].strip()
+                    if next_line and not next_line.startswith('#') and not next_line.startswith('def') and not next_line.startswith('class'):
                         self.issues.append({
-                            'line': i,
-                            'type': 'Documentation',
-                            'severity': 'Minor',
-                            'message': f"Missing docstring for function: {stripped[:40]}...",
-                            'suggestion': 'Add docstring:\n    """Brief description.\n    \n    Args:\n        param: description\n    Returns:\n        description\n    """'
+                            'line': i + 1,
+                            'type': 'Unreachable Code',
+                            'severity': 'Major',
+                            'message': f"Unreachable code after return: {next_line}",
+                            'suggestion': "Move this code before the return statement or remove it"
                         })
+
+    def _check_error_handling(self, code: str):
+        """Check for missing error handling on risky operations."""
+        lines = code.split('\n')
+        dangerous_ops = [
+            ('open(', 'file operations'),
+            ('json.load', 'JSON parsing'),
+            ('requests.', 'network requests'),
+            ('int(', 'type conversion'),
+            ('float(', 'type conversion'),
+            ('[', 'list indexing'),
+        ]
+        
+        for i, line in enumerate(lines, 1):
+            if '#' in line:
+                line = line[:line.index('#')]
+            
+            for op, desc in dangerous_ops:
+                if op in line:
+                    # Check if in try block
+                    if i > 1 and 'try:' not in lines[i-2] and 'try:' not in lines[i-1]:
+                        if op == 'open(' or op == 'requests.' or op == 'json.load':
+                            self.issues.append({
+                                'line': i,
+                                'type': 'Missing Error Handling',
+                                'severity': 'Major',
+                                'message': f"Missing error handling for {desc}: {line.strip()}",
+                                'suggestion': f"Wrap in try-except:\ntry:\n    {line.strip()}\nexcept Exception as e:\n    logger.error(f'Error: {{e}}')"
+                            })
+
+    def _check_unreachable_code(self, code: str):
+        """Check for unreachable code."""
+        lines = code.split('\n')
+        
+        for i, line in enumerate(lines, 1):
+            stripped = line.strip()
+            if stripped.startswith('return') or stripped.startswith('raise') or stripped == 'break' or stripped == 'continue':
+                # Check following lines for code
+                for j in range(i, min(i + 5, len(lines))):
+                    next_line = lines[j].strip()
+                    if next_line and not next_line.startswith('#'):
+                        if not (next_line.startswith('def ') or next_line.startswith('class ') or next_line.startswith('else') or next_line.startswith('except') or next_line.startswith('finally')):
+                            # Check indentation
+                            if len(lines[j]) - len(lines[j].lstrip()) <= len(line) - len(line.lstrip()):
+                                self.issues.append({
+                                    'line': j + 1,
+                                    'type': 'Unreachable Code',
+                                    'severity': 'Major',
+                                    'message': f"Unreachable code: {next_line}",
+                                    'suggestion': "Move this code before the return/break statement or remove it"
+                                })
+                                break
+
+    def _check_type_mismatches(self, code: str):
+        """Check for potential type mismatches in operations."""
+        lines = code.split('\n')
+        
+        for i, line in enumerate(lines, 1):
+            stripped = line.strip()
+            if not stripped or stripped.startswith('#'):
+                continue
+            
+            # Check for string + number operations
+            # Pattern: variable + number or "string" + number
+            if '+' in line or '-' in line:
+                # Look for string literals being used with numbers
+                if re.search(r'["\'].*["\']?\s*[\+\-]\s*\d', line):
+                    self.issues.append({
+                        'line': i,
+                        'type': 'Type Mismatch',
+                        'severity': 'Critical',
+                        'message': f"Type mismatch: String and number operation: {line.strip()}",
+                        'suggestion': "Convert string to number first: int(age) + 5 or use f-strings: f'{age} is the age'"
+                    })
+                
+                # Look for variable that is assigned as string being used with numbers
+                var_match = re.search(r'(\w+)\s*\+\s*\d', line)
+                if var_match:
+                    var_name = var_match.group(1)
+                    # Check if this variable was assigned a string
+                    for check_line in lines:
+                        if re.search(rf'{var_name}\s*=\s*["\']', check_line):
+                            self.issues.append({
+                                'line': i,
+                                'type': 'Type Mismatch',
+                                'severity': 'Critical',
+                                'message': f"Type mismatch: '{var_name}' is a string but used in numeric operation: {line.strip()}",
+                                'suggestion': f"Convert to number: int({var_name}) + 5 or str(5) + {var_name}"
+                            })
+                            break
 
     def _count_severities(self) -> Dict[str, int]:
+
         """Count issues by severity."""
         counts = {'Critical': 0, 'Major': 0, 'Minor': 0}
         for issue in self.issues:

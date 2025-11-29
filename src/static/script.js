@@ -201,7 +201,7 @@ function displayResults(data) {
   if (review.suggestions && review.suggestions.length > 0) {
     suggestionsHtml = `
             <div style="margin-top: 10px;">
-                <strong style="color: #333;">Suggestions:</strong>
+                <strong style="color: #333;">💡 Suggestions:</strong>
                 <ul class="suggestions-list">
                     ${review.suggestions
                       .map((s) => `<li>${escapeHtml(s)}</li>`)
@@ -211,18 +211,51 @@ function displayResults(data) {
         `;
   }
 
+  let issuesHtml = "";
+  if (review.issues && review.issues !== "No issues found") {
+    issuesHtml = `
+            <div style="margin-top: 10px; padding: 10px; background: #f8d7da; border-left: 4px solid #721c24; border-radius: 4px;">
+                <strong style="color: #721c24;">⚠️ Issues:</strong>
+                <div style="color: #721c24; margin-top: 5px;">${escapeHtml(
+                  review.issues
+                )}</div>
+            </div>
+        `;
+  }
+
+  let ratingHtml = "";
+  if (review.quality_rating && review.quality_rating !== "N/A") {
+    ratingHtml = `<div class="metric"><span class="metric-label">Quality Rating:</span> <span class="metric-value">${escapeHtml(
+      review.quality_rating
+    )}</span></div>`;
+  }
+
+  let recommendationHtml = "";
+  if (review.recommendation) {
+    recommendationHtml = `
+            <div style="margin-top: 10px; padding: 10px; background: #d1ecf1; border-left: 4px solid #0c5460; border-radius: 4px;">
+                <strong style="color: #0c5460;">💬 Recommendation:</strong>
+                <div style="color: #0c5460; margin-top: 5px;">${escapeHtml(
+                  review.recommendation
+                )}</div>
+            </div>
+        `;
+  }
+
   reviewResult.innerHTML = `
-        <div class="metric"><span class="metric-label">Summary:</span></div>
-        <div style="padding: 8px; background: white; border-radius: 4px; margin: 8px 0; color: #555; line-height: 1.5;">${escapeHtml(
-          review.summary
-        )}</div>
-        ${suggestionsHtml}
-        <div class="metric" style="margin-top: 10px;"><span class="metric-label">Severity:</span> <span class="metric-value">${escapeHtml(
-          review.severity
-        )}</span></div>
         <div class="metric"><span class="metric-label">Model:</span> <span class="metric-value">${escapeHtml(
-          review.model_used
+          review.model_used || "AI Model"
         )}</span></div>
+        <div style="padding: 10px; background: #e7f3ff; border-left: 4px solid #0066cc; border-radius: 4px; margin: 10px 0;">
+            <strong style="color: #004085;">📝 Summary:</strong>
+            <div style="color: #004085; margin-top: 5px; line-height: 1.6;">${escapeHtml(
+              review.summary
+            )}</div>
+        </div>
+        ${suggestionsHtml}
+        ${issuesHtml}
+        ${ratingHtml}
+        ${recommendationHtml}
     `;
 }
 

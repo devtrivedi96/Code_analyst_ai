@@ -54,7 +54,18 @@ def analyze_code():
 
         # 3. Logic Analysis
         logic_analyzer = LogicAnalyzer()
-        logic_analysis = logic_analyzer.analyze(code)
+        logic_issues = logic_analyzer.analyze(code)
+        
+        # Convert list to proper response format
+        logic_analysis = {
+            'total_issues': len(logic_issues),
+            'issues': logic_issues,
+            'severity_count': {
+                'Critical': sum(1 for i in logic_issues if i.get('severity') == 'Critical'),
+                'Major': sum(1 for i in logic_issues if i.get('severity') == 'Major'),
+                'Minor': sum(1 for i in logic_issues if i.get('severity') == 'Minor')
+            }
+        }
 
         # 4. Best Practices Check
         practices_checker = BestPracticesChecker()

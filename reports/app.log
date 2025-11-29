@@ -60,3 +60,5 @@
 2025-11-28 21:49:08,918 - src.analyzer.report_generator - INFO - Analysis report successfully generated and saved to reports/demo_report.md
 2025-11-28 21:49:08,919 - src.utils.logger - INFO - Report saved to: reports/demo_report.md
 2025-11-28 21:49:08,919 - src.utils.logger - INFO - AI Code Analysis complete.
+2025-11-29 10:04:21,543 - root - INFO - Logging setup complete.
+2025-11-29 10:04:21,963 - src.analyzer.ai_reviewer - WARNING - GEMINI_API_KEY environment variable not set. AI review will use fallback.
