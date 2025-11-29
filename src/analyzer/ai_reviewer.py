@@ -5,7 +5,7 @@ import google.generativeai as genai
 logger = logging.getLogger(__name__)
 
 # Configure Gemini API
-GEMINI_API_KEY = "AIzaSyAmAFvqu13MnqegONw1tvgFepmq-PZa2Zw"
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
     logger.info("Gemini API configured successfully")
