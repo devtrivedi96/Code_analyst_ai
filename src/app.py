@@ -67,9 +67,13 @@ def analyze_code():
             }
         }
 
-        # 4. Best Practices Check
+        # 4. Best Practices Check (pass selected model for recommendations)
         practices_checker = BestPracticesChecker()
-        best_practices = practices_checker.check(code)
+        try:
+            best_practices = practices_checker.check(code, model=model)
+        except TypeError:
+            # Fallback if older signature: call without model
+            best_practices = practices_checker.check(code)
 
         # 5. AI Review
         ai_review = review_code_with_ai(code, model_name=model)

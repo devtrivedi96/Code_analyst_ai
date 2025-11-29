@@ -1,7 +1,8 @@
 import logging
 import os
 import google.generativeai as genai
-
+from dotenv import load_dotenv
+load_dotenv()
 logger = logging.getLogger(__name__)
 
 # Configure Gemini API
