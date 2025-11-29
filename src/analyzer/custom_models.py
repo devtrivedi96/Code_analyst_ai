@@ -11,7 +11,7 @@ import torch
 from typing import Dict, List, Tuple, Optional
 from pathlib import Path
 
-# Setup logging
+# Setup logg
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
