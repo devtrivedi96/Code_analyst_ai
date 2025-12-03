@@ -18,6 +18,21 @@ def review_code_with_ai(code: str, model_name: str = "gemini-pro") -> dict:
         dict: A dictionary containing AI review result or fallback if API not available.
     """
     
+    # If deployment requests disabling custom/local models, map requests to cloud models
+    if os.getenv('DISABLE_CUSTOM_MODELS', '').lower() in ('1', 'true', 'yes'):
+        if model_name in ("local", "unified", "codebert"):
+            # Prefer OpenAI if configured, then Gemini, then Anthropic
+            if os.getenv('OPENAI_API_KEY'):
+                fallback = 'gpt-4'
+            elif os.getenv('GEMINI_API_KEY'):
+                fallback = 'gemini-pro'
+            elif os.getenv('ANTHROPIC_API_KEY'):
+                fallback = 'claude'
+            else:
+                fallback = 'gemini-pro'
+            logger.info(f"DISABLE_CUSTOM_MODELS set — routing '{model_name}' to cloud model '{fallback}'")
+            model_name = fallback
+
     # Route to local / unified analyzers when requested
     if model_name in ("local", "unified", "codebert"):
         try:
