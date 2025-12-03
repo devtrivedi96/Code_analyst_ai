@@ -124,6 +124,8 @@ def analyze_code():
             ai_review = review_code_with_ai(code, model_name=model)
         except Exception as e:
             logging.getLogger(__name__).warning(f"AI reviewer unavailable: {e}")
+            # Return a helpful debug message when requested via env var
+            verbose = os.getenv('AI_REVIEW_VERBOSE_ERRORS', '').lower() in ('1', 'true', 'yes')
             ai_review = {
                 'summary': 'AI reviewer unavailable in this environment',
                 'suggestions': [],
@@ -131,6 +133,8 @@ def analyze_code():
                 'quality_rating': 'N/A',
                 'recommendation': 'Enable AI reviewer or run outside serverless'
             }
+            if verbose:
+                ai_review['error'] = str(e)
 
         # Prepare response
         analysis_results = {
