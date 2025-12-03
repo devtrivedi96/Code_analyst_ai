@@ -1,16 +1,10 @@
 import logging
 import os
-import google.generativeai as genai
 from dotenv import load_dotenv
 load_dotenv()
 logger = logging.getLogger(__name__)
-
-# Configure Gemini API
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
-    logger.info("Gemini API configured successfully")
-else:
+if not GEMINI_API_KEY:
     logger.warning("GEMINI_API_KEY environment variable not set. AI review will use fallback.")
 
 def review_code_with_ai(code: str, model_name: str = "gemini-pro") -> dict:
@@ -212,6 +206,17 @@ def _review_with_gemini(code: str) -> dict:
     """Use Google Gemini API for code review."""
     try:
         logger.info("Requesting AI review from Gemini...")
+        try:
+            import google.generativeai as genai
+            # configure if key available
+            if GEMINI_API_KEY:
+                try:
+                    genai.configure(api_key=GEMINI_API_KEY)
+                except Exception:
+                    logger.debug("Could not configure Gemini client with provided key")
+        except Exception as e:
+            logger.warning(f"Gemini client not available: {e}")
+            return _fallback_review(code, "gemini-pro")
         
         # Use the latest available Gemini model
         model_names = ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash', 'gemini-pro']

@@ -9,10 +9,9 @@ sys.path.insert(0, project_root)
 
 from src.analyzer.syntax_checker import check_syntax
 from src.analyzer.quality_analyzer import analyze_quality
-from src.analyzer.ai_reviewer import review_code_with_ai
 from src.analyzer.logic_analyzer import LogicAnalyzer
 from src.analyzer.best_practices import BestPracticesChecker
-from src.analyzer.model_integration import get_custom_model_integration
+# Lazy imports for heavy model integrations (avoid at cold-start in serverless)
 
 app = Flask(__name__)
 app.config['JSON_SORT_KEYS'] = False
@@ -44,8 +43,14 @@ def list_models():
         # Custom/local models from integration (lazy init)
         custom = []
         try:
-            integration = get_custom_model_integration()
-            custom = integration.get_available_models()
+            # Import integration here to avoid heavy imports at module load
+            from src.analyzer.model_integration import get_custom_model_integration
+            # If running on Vercel or explicitly disabled, skip initializing heavy local models
+            if os.getenv('VERCEL') or os.getenv('DISABLE_CUSTOM_MODELS'):
+                logging.getLogger(__name__).info('Running in serverless environment; skipping custom model initialization')
+            else:
+                integration = get_custom_model_integration()
+                custom = integration.get_available_models()
         except Exception as e:
             # If integration fails, return cloud-only but log
             logging.getLogger(__name__).warning(f"Custom model integration error: {e}")
@@ -113,8 +118,19 @@ def analyze_code():
             # Fallback if older signature: call without model
             best_practices = practices_checker.check(code)
 
-        # 5. AI Review
-        ai_review = review_code_with_ai(code, model_name=model)
+        # 5. AI Review (lazy import to avoid heavy external deps at cold start)
+        try:
+            from src.analyzer.ai_reviewer import review_code_with_ai
+            ai_review = review_code_with_ai(code, model_name=model)
+        except Exception as e:
+            logging.getLogger(__name__).warning(f"AI reviewer unavailable: {e}")
+            ai_review = {
+                'summary': 'AI reviewer unavailable in this environment',
+                'suggestions': [],
+                'issues': {},
+                'quality_rating': 'N/A',
+                'recommendation': 'Enable AI reviewer or run outside serverless'
+            }
 
         # Prepare response
         analysis_results = {
