@@ -68,7 +68,10 @@ class CustomModelIntegration:
                 "id": "local",
                 "name": f"Local Model ({self.local_model.model_name})",
                 "type": "local",
-                "description": "Local running model (Ollama)"
+                "description": "Local running model (Ollama)",
+                "link": self.local_model.base_url,
+                "api": True if getattr(self.local_model, 'api_endpoint', None) else False,
+                "api_endpoint": getattr(self.local_model, 'api_endpoint', None)
             })
         
         models.append({

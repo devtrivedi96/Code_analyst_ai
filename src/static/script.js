@@ -213,7 +213,9 @@ function displayResults(data) {
 
   let issuesHtml = "";
   if (review.issues && review.issues !== "No issues found") {
-    issuesHtml = `
+    // If issues is a string, render directly
+    if (typeof review.issues === "string") {
+      issuesHtml = `
             <div style="margin-top: 10px; padding: 10px; background: #f8d7da; border-left: 4px solid #721c24; border-radius: 4px;">
                 <strong style="color: #721c24;">⚠️ Issues:</strong>
                 <div style="color: #721c24; margin-top: 5px;">${escapeHtml(
@@ -221,6 +223,33 @@ function displayResults(data) {
                 )}</div>
             </div>
         `;
+    } else if (Array.isArray(review.issues)) {
+      // Array of issues
+      issuesHtml = `<div style="margin-top: 10px;"><strong style="color: #721c24;">⚠️ Issues:</strong><ul class="suggestions-list">`;
+      review.issues.forEach((it) => {
+        issuesHtml += `<li>${escapeHtml(
+          typeof it === "string" ? it : JSON.stringify(it)
+        )}</li>`;
+      });
+      issuesHtml += `</ul></div>`;
+    } else if (typeof review.issues === "object") {
+      // Object: probably a mapping of model -> analysis
+      issuesHtml = `<div style="margin-top: 10px; padding: 10px; background: #f8d7da; border-left: 4px solid #721c24; border-radius: 4px;"><strong style="color: #721c24;">⚠️ Issues (per model):</strong>`;
+      Object.entries(review.issues).forEach(([k, v]) => {
+        let rendered = "";
+        if (typeof v === "string") rendered = escapeHtml(v);
+        else
+          try {
+            rendered = escapeHtml(JSON.stringify(v, null, 2));
+          } catch (e) {
+            rendered = escapeHtml(String(v));
+          }
+        issuesHtml += `<div style="margin-top:8px;"><strong>${escapeHtml(
+          k
+        )}:</strong><pre style="white-space:pre-wrap; font-size:13px; background:#fff; padding:6px; border-radius:4px;">${rendered}</pre></div>`;
+      });
+      issuesHtml += `</div>`;
+    }
   }
 
   let ratingHtml = "";
@@ -282,4 +311,54 @@ function escapeHtml(text) {
 // Focus on code input on page load
 window.addEventListener("load", () => {
   codeInput.focus();
+  loadAvailableModels();
 });
+
+// Fetch available models from backend and populate model select
+function loadAvailableModels() {
+  fetch("/api/models")
+    .then((res) => {
+      if (!res.ok) return res.json().then((d) => Promise.reject(d));
+      return res.json();
+    })
+    .then((data) => {
+      // Clear existing options
+      while (modelSelect.firstChild)
+        modelSelect.removeChild(modelSelect.firstChild);
+
+      // Add cloud models first
+      if (data.cloud_models && data.cloud_models.length) {
+        data.cloud_models.forEach((m) => {
+          const opt = document.createElement("option");
+          opt.value = m.id;
+          opt.textContent = m.name;
+          modelSelect.appendChild(opt);
+        });
+      }
+
+      // Add a separator / optgroup for custom models if present
+      if (data.custom_models && data.custom_models.length) {
+        const sep = document.createElement("option");
+        sep.textContent = "--- Custom / Local Models ---";
+        sep.disabled = true;
+        modelSelect.appendChild(sep);
+
+        data.custom_models.forEach((m) => {
+          const opt = document.createElement("option");
+          opt.value = m.id;
+          // Show API/link info inline so users know if the model exposes an API
+          const apiNote = m.api
+            ? m.api_endpoint
+              ? ` (api: ${m.api_endpoint})`
+              : ` (api: ${m.link})`
+            : " (no API)";
+          opt.textContent = `${m.name}${apiNote}`;
+          modelSelect.appendChild(opt);
+        });
+      }
+    })
+    .catch((err) => {
+      console.warn("Could not load models:", err);
+      // leave defaults if any
+    });
+}

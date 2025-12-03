@@ -171,20 +171,32 @@ class LocalModelAnalyzer:
     def __init__(self, model_name: str = "llama2", base_url: str = "http://localhost:11434"):
         """Initialize local model connection"""
         self.model_name = model_name
-        self.base_url = base_url
+        # Allow overriding the local model base URL via env var for non-default installs
+        self.base_url = os.getenv('LOCAL_MODEL_BASE_URL', base_url)
+        self.api_endpoint = None
         self.available = self._check_connection()
     
     def _check_connection(self) -> bool:
         """Check if local model is available"""
         try:
             import requests
-            response = requests.get(f"{self.base_url}/api/tags", timeout=2)
-            if response.status_code == 200:
-                logger.info(f"✅ Connected to local model server at {self.base_url}")
-                return True
+            # Try several common local-model endpoints for compatibility
+            endpoints = ["/api/tags", "/v1/models", "/models"]
+            for ep in endpoints:
+                try:
+                    url = self.base_url.rstrip('/') + ep
+                    response = requests.get(url, timeout=2)
+                    if response.status_code == 200:
+                        # Keep the endpoint that worked for later API calls
+                        self.api_endpoint = url
+                        logger.info(f"✅ Connected to local model server at {url}")
+                        return True
+                except Exception:
+                    continue
         except:
             logger.warning(f"⚠️ Local model server not running at {self.base_url}")
-            return False
+        # If no endpoint matched, not available
+        return False
     
     def analyze_code(self, code: str) -> Dict:
         """Analyze code using local model"""
@@ -237,10 +249,27 @@ Provide a concise analysis."""
         """List available local models"""
         try:
             import requests
-            response = requests.get("http://localhost:11434/api/tags", timeout=2)
-            if response.status_code == 200:
-                models = response.json().get("models", [])
-                return [m["name"] for m in models]
+            base = "http://localhost:11434"
+            # Try several endpoints and return a list of model names when available
+            for ep in ["/api/tags", "/v1/models", "/models"]:
+                try:
+                    url = base.rstrip('/') + ep
+                    response = requests.get(url, timeout=2)
+                    if response.status_code == 200:
+                        data = response.json()
+                        # Try common shapes
+                        if isinstance(data, dict):
+                            # /api/tags -> {"models": [{"name": ...}]}
+                            if "models" in data and isinstance(data["models"], list):
+                                return [m.get("name") or m.get("id") for m in data["models"]]
+                            # /v1/models -> {"models": [{"model": ...}]}
+                            if "models" in data:
+                                return [m.get("id") or m.get("model") or str(m) for m in data["models"]]
+                        # If it's a list
+                        if isinstance(data, list):
+                            return [str(x.get("name") if isinstance(x, dict) else x) for x in data]
+                except Exception:
+                    continue
         except:
             pass
         return []

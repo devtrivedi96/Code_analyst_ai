@@ -12,6 +12,7 @@ from src.analyzer.quality_analyzer import analyze_quality
 from src.analyzer.ai_reviewer import review_code_with_ai
 from src.analyzer.logic_analyzer import LogicAnalyzer
 from src.analyzer.best_practices import BestPracticesChecker
+from src.analyzer.model_integration import get_custom_model_integration
 
 app = Flask(__name__)
 app.config['JSON_SORT_KEYS'] = False
@@ -29,12 +30,49 @@ def index():
     return render_template('index.html')
 
 
+@app.route('/api/models', methods=['GET'])
+def list_models():
+    """Return available cloud + custom models for the frontend selector."""
+    try:
+        # Cloud models offered by the app
+        cloud_models = [
+            {"id": "gemini-pro", "name": "Gemini Pro", "type": "cloud"},
+            {"id": "gpt-4", "name": "GPT-4", "type": "cloud"},
+            {"id": "claude", "name": "Claude", "type": "cloud"}
+        ]
+
+        # Custom/local models from integration (lazy init)
+        custom = []
+        try:
+            integration = get_custom_model_integration()
+            custom = integration.get_available_models()
+        except Exception as e:
+            # If integration fails, return cloud-only but log
+            logging.getLogger(__name__).warning(f"Custom model integration error: {e}")
+
+        response = {
+            "cloud_models": cloud_models,
+            "custom_models": custom
+        }
+        return jsonify(response), 200
+    except Exception as e:
+        logging.getLogger(__name__).error(f"Error listing models: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route('/api/analyze', methods=['POST'])
 def analyze_code():
     """Analyze code provided in request"""
     try:
         data = request.get_json()
         code = data.get('code', '')
+        # Normalize escaped newlines if the client sent literal "\\n" sequences
+        if isinstance(code, str) and "\\n" in code:
+            try:
+                # Replace literal backslash-n with an actual newline for parsing
+                code = code.replace('\\n', "\n")
+            except Exception:
+                pass
         model = data.get('model', 'gemini-pro')
 
         if not code.strip():

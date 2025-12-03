@@ -24,6 +24,179 @@ def review_code_with_ai(code: str, model_name: str = "gemini-pro") -> dict:
         dict: A dictionary containing AI review result or fallback if API not available.
     """
     
+    # Route to local / unified analyzers when requested
+    if model_name in ("local", "unified", "codebert"):
+        try:
+            # import here to avoid circular import at module load
+            from src.analyzer.model_integration import get_custom_model_integration
+
+            integration = get_custom_model_integration()
+            # Map requested model to integration ids
+            if model_name == "codebert":
+                res = integration.analyze_with_model(code, "codebert")
+            elif model_name == "local":
+                res = integration.analyze_with_model(code, "local")
+            else:
+                res = integration.analyze_with_model(code, "unified")
+
+            # If integration produced an error, fallback
+            if not res or res.get("status") != "success":
+                logger.info("Integration review unavailable or returned error, using fallback")
+                return _fallback_review(code, model_name)
+
+            # Normalize integration result into review-like structure
+            # Build a better summary and extract readable suggestions/issues
+            result_obj = res.get("result", {}) or {}
+
+            # If the unified analyzer returns a wrapper, unwrap it
+            if isinstance(result_obj, dict) and "unified_analysis" in result_obj:
+                inner = result_obj.get("unified_analysis")
+                if isinstance(inner, dict):
+                    # prefer the inner unified_analysis dict
+                    result_obj = inner
+
+            # Try common summary fields
+            summary_text = (
+                result_obj.get("code_snippet")
+                or result_obj.get("analysis")
+                or result_obj.get("summary")
+                or ", ".join(result_obj.get("models_used", []))
+                or "Local model analysis"
+            )
+
+            suggestions = []
+            issues_map = {}
+            analyses = result_obj.get("analyses", {}) or {}
+
+            # If analyses is empty but result_obj itself contains an 'analysis' string
+            # (e.g., local model returned a single text blob), treat that as a single analysis
+            if not analyses and isinstance(result_obj.get("analysis"), str):
+                analyses = {res.get("model", "local"): {"analysis": result_obj.get("analysis")}}
+
+            def _extract_from_text(text: str):
+                """Heuristic extraction: split analysis text into summary, suggestions, issues."""
+                s_list = []
+                i_list = []
+                if not text:
+                    return s_list, i_list
+
+                # Normalize
+                text = text.strip()
+
+                # If text contains explicit sections, try to parse them
+                # Look for lines starting with SUGGESTIONS:, ISSUES:, SUMMARY:
+                lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+                current = None
+                for ln in lines:
+                    up = ln.upper()
+                    if up.startswith('SUGGESTIONS:'):
+                        current = 'suggestions'
+                        continue
+                    if up.startswith('ISSUES:'):
+                        current = 'issues'
+                        continue
+                    if up.startswith('SUMMARY:'):
+                        current = 'summary'
+                        continue
+
+                    if ln.startswith('- ') or ln.startswith('• '):
+                        val = ln[2:].strip()
+                        if current == 'issues':
+                            i_list.append(val)
+                        else:
+                            s_list.append(val)
+                    else:
+                        # If no explicit sections, treat short lines as suggestions
+                        if current == 'issues':
+                            i_list.append(ln)
+                        elif current == 'suggestions':
+                            s_list.append(ln)
+                        else:
+                            # fallback: split by sentence punctuation for longer blobs
+                            if len(ln) < 300 and (ln.endswith('.') or ln.endswith('!') or ln.endswith('?')):
+                                s_list.append(ln)
+                            else:
+                                # long paragraph: take first sentence as summary, subsequent sentences as suggestions
+                                import re
+                                parts = re.split(r'(?<=[\.\!\?])\s+', ln)
+                                for p in parts:
+                                    p = p.strip()
+                                    if not p:
+                                        continue
+                                    if len(s_list) < 5:
+                                        s_list.append(p)
+                # Heuristic: find lines mentioning 'error', 'bug', 'vulnerab', 'exception'
+                for ln in lines:
+                    low = ln.lower()
+                    if any(k in low for k in ('error', 'bug', 'vulnerab', 'exception', 'issue', 'undefined')):
+                        if ln not in i_list:
+                            i_list.append(ln)
+
+                return s_list, i_list
+
+            for model_key, model_res in analyses.items():
+                # If the model returned a dict with 'insights' or 'analysis', extract them
+                if isinstance(model_res, dict):
+                    # explicit insights list
+                    if "insights" in model_res and isinstance(model_res.get("insights"), (list, tuple)):
+                        for it in model_res.get("insights"):
+                            if isinstance(it, str) and it:
+                                suggestions.append(it)
+
+                    # free-text analysis
+                    if "analysis" in model_res and isinstance(model_res.get("analysis"), str):
+                        s, i = _extract_from_text(model_res.get("analysis"))
+                        suggestions.extend(s)
+                        if i:
+                            issues_map[model_key] = i
+
+                    # suggestions as list
+                    if "suggestions" in model_res and isinstance(model_res.get("suggestions"), (list, tuple)):
+                        for it in model_res.get("suggestions"):
+                            if isinstance(it, str):
+                                suggestions.append(it)
+
+                    # Capture any explicit issues structure
+                    if "issues" in model_res:
+                        issues_map[model_key] = model_res.get("issues")
+                else:
+                    # model_res is likely a plain string analysis
+                    try:
+                        s, i = _extract_from_text(str(model_res))
+                        suggestions.extend(s)
+                        if i:
+                            issues_map[model_key] = i
+                    except Exception:
+                        suggestions.append("Analysis available")
+
+            # Deduplicate and trim suggestions
+            seen = set()
+            compact_suggestions = []
+            for s in suggestions:
+                s_str = (s or "").strip()
+                if not s_str:
+                    continue
+                if s_str in seen:
+                    continue
+                seen.add(s_str)
+                compact_suggestions.append(s_str)
+                if len(compact_suggestions) >= 8:
+                    break
+
+            quality = result_obj.get("quality_rating") or "N/A"
+
+            return {
+                "summary": summary_text,
+                "suggestions": compact_suggestions,
+                "issues": issues_map,
+                "quality_rating": quality,
+                "recommendation": f"Results from {res.get('model', model_name)}",
+                "model_used": res.get("model", model_name)
+            }
+        except Exception as e:
+            logger.warning(f"Local/unified integration error: {e}")
+            return _fallback_review(code, model_name)
+
     # Use Gemini if API key is available
     if GEMINI_API_KEY and model_name == "gemini-pro":
         return _review_with_gemini(code)
